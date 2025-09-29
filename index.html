@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Companion Toy AI — Single File PWA (Local Memories + Ad Modal, ES5)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Inline Manifest (PWA) -->
+  <link rel="manifest" href='data:application/json,{
+    "name":"Companion Toy AI",
+    "short_name":"Toy AI",
+    "start_url":"./",
+    "display":"standalone",
+    "background_color":"#0b0f19",
+    "theme_color":"#1e66ff",
+    "icons":[
+      {"src":"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22192%22 height=%22192%22 viewBox=%220 0 192 192%22%3E%3Crect width=%22192%22 height=%22192%22 fill=%22%231e66ff%22/%3E%3Ctext x=%2296%22 y=%22112%22 font-size=%2280%22 text-anchor=%22middle%22 fill=%22white%22%3ECT%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"}
+    ]
+  }'>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #0b0f19;
+      color: #dbe2ff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    :focus { outline: 1px dashed #1e66ff; outline-offset: 2px; }
+
+    /* Grid Layout */
+    .app {
+      display: grid;
+      grid-template-rows: 5vh 75vh 20vh;
+      grid-template-columns: 100%;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Themed containers with blue accents and shallow valley shadows */
+    header, main, footer {
+      border: 1px solid #1e66ff;
+      box-shadow: inset 0 1px 0 rgba(30,102,255,0.25), inset 0 -2px 8px rgba(0,0,0,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 8px;
+    }
+    header .status-bar { width: 100%; text-align: center; padding: 4px; letter-spacing: 0.02em; }
+
+    /* Main chat area */
+    .chat-wrap {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+    .chat {
+      width: min(900px, 95%);
+      height: 100%;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chat::-webkit-scrollbar { width: 10px; height: 10px; }
+    .chat::-webkit-scrollbar-thumb { background: #1e66ff; }
+    .chat::-webkit-scrollbar-track { background: #0b0f19; border: 1px solid #1e66ff; }
+
+    /* Chat bubbles (left/right aligned, word wrap) */
+    .bubble {
+      max-width: 80%;
+      padding: 10px 12px;
+      border: 1px solid #1e66ff;
+      background: #0e1424;
+      color: #dbe2ff;
+      border-radius: 2px;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+      box-shadow: 0 1px 0 rgba(30,102,255,0.2), inset 0 -1px 4px rgba(0,0,0,0.35);
+      text-align: left;
+    }
+    .bubble.user { align-self: flex-end; border-color: #3b82f6; background: #0c1630; }
+    .bubble.bot  { align-self: flex-start; border-color: #1e66ff; background: #0e1424; }
+
+    /* Footer input and buttons */
+    .footer-wrap {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      align-items: center;
+      justify-items: center;
+      gap: 8px;
+    }
+    .input-row {
+      width: 90%;
+      height: 95%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #input {
+      width: 100%;
+      height: 100%;
+      resize: none;
+      border: 1px solid #1e66ff;
+      background: #0e1424;
+      color: #dbe2ff;
+      padding: 8px 10px;
+      box-shadow: inset 0 1px 0 rgba(30,102,255,0.25), inset 0 -2px 8px rgba(0,0,0,0.35);
+      text-align: center;
+    }
+    .btn-row {
+      width: 90%;
+      height: 95%;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn {
+      border: 1px solid #1e66ff;
+      background: #0b0f19;
+      color: #dbe2ff;
+      padding: 8px 16px;
+      box-shadow: inset 0 1px 0 rgba(30,102,255,0.25), inset 0 -2px 8px rgba(0,0,0,0.35);
+      cursor: pointer;
+    }
+    .btn:hover { background: #0e1424; }
+    .btn:active { background: #0c1322; }
+
+    /* Full-screen modal base (Config + Ad reuse) */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4,8,16,0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      width: min(1100px, 96%);
+      max-height: 90vh;
+      overflow-y: auto;
+      border: 1px solid #1e66ff;
+      background: #0b0f19;
+      box-shadow: inset 0 1px 0 rgba(30,102,255,0.25), inset 0 -2px 8px rgba(0,0,0,0.35);
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      justify-items: center;
+    }
+    .modal h2, .modal h3 { margin: 4px 0 2px 0; text-align: center; }
+    .field {
+      width: 95%;
+      display: grid;
+      grid-template-rows: auto auto;
+      gap: 6px;
+      justify-items: start;
+      text-align: left;
+    }
+    .field label { font-weight: 600; color: #a8c1ff; }
+    .field textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+      border: 1px solid #1e66ff;
+      background: #0e1424;
+      color: #dbe2ff;
+      padding: 8px 10px;
+      box-shadow: inset 0 1px 0 rgba(30,102,255,0.25), inset 0 -2px 8px rgba(0,0,0,0.35);
+    }
+    .modal-actions {
+      width: 95%;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 0 12px 0;
+    }
+
+    /* Center everything except bubbles */
+    header *, main *, footer * { text-align: center; }
+    .bubble * { text-align: left; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="status-bar" id="status">Ready • Persona: [unset] • PWA: standby</div>
+    </header>
+
+    <main>
+      <div class="chat-wrap">
+        <div class="chat" id="chat"></div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-wrap">
+        <div class="input-row">
+          <textarea id="input" placeholder="Type your message and press Enter..."></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btnLoad">Load</button>
+          <button class="btn" id="btnSave">Save</button>
+          <button class="btn" id="btnConfig">Config</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Hidden file input for loading JSON -->
+  <input id="fileInput" type="file" accept="application/json" style="display:none" />
+
+  <!-- Config Modal -->
+  <div class="modal" id="configModal">
+    <div class="modal-content">
+      <h2>Configuration</h2>
+
+      <div class="field">
+        <label for="personaField">Persona (JSON) — gender, age, name, goal</label>
+        <textarea id="personaField" placeholder='{"gender":"","age":"","name":"","goal":""}'></textarea>
+      </div>
+
+      <h3>Responses</h3>
+      <div class="field">
+        <label for="responsesField">Scripted responses (JSON Array of {trigger, reply})</label>
+        <textarea id="responsesField" placeholder='[{"trigger":"hello","reply":"Hello! I am {name}."},{"trigger":"goal","reply":"My goal is {goal}."}]'></textarea>
+      </div>
+
+      <h3>Local memories</h3>
+      <div class="field">
+        <label for="localMemoriesField">Local memories (persistent, JSON Array)</label>
+        <textarea id="localMemoriesField" placeholder='[]'></textarea>
+      </div>
+
+      <h3>Backstory</h3>
+      <div class="field">
+        <label for="backstoryField">Backstory (persistent, JSON Object)</label>
+        <textarea id="backstoryField" placeholder='{"origin":"","traits":[],"notes":""}'></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn" id="applyConfig">Apply</button>
+        <button class="btn" id="resetConfig">Reset</button>
+        <button class="btn" id="closeConfig">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= AI Block (ES5) ======================= -->
+  <script>
+    (function () {
+      /* Storage Keys */
+      var KEY_PERSONA = 'toyAI.persona';
+      var KEY_RESPONSES = 'toyAI.responses';
+      var KEY_LOCAL_MEM = 'toyAI.localMemories';
+      var KEY_BACKSTORY = 'toyAI.backstory';
+
+      /* Defaults */
+      var DEFAULT_PERSONA = { gender: "", age: "", name: "", goal: "" };
+      var DEFAULT_RESPONSES = [
+        { trigger: "hello", reply: "Hello! I am {name}." },
+        { trigger: "hi", reply: "Hi — I am {name}." },
+        { trigger: "goal", reply: "My goal is {goal}." },
+        { trigger: "thanks", reply: "You're welcome." },
+        { trigger: "bye", reply: "Goodbye for now." }
+      ];
+      var DEFAULT_LOCAL_MEM = [];
+      var DEFAULT_BACKSTORY = { origin: "A console-inspired companion tuned for clarity and calm.", traits: ["observant","direct","supportive"], notes: "" };
+
+      /* Utils */
+      function safeParse(raw, fallback) { try { return JSON.parse(raw); } catch (e) { return fallback; } }
+      function persist(key, obj) { localStorage.setItem(key, JSON.stringify(obj)); }
+      function retrieve(key, fallback) {
+        var raw = localStorage.getItem(key);
+        return raw ? safeParse(raw, fallback) : fallback;
+      }
+      function nowISO() { return new Date().toISOString(); }
+
+      /* State */
+      var STATE = {
+        persona: retrieve(KEY_PERSONA, DEFAULT_PERSONA),
+        responses: retrieve(KEY_RESPONSES, DEFAULT_RESPONSES),
+        localMemories: retrieve(KEY_LOCAL_MEM, DEFAULT_LOCAL_MEM),
+        backstory: retrieve(KEY_BACKSTORY, DEFAULT_BACKSTORY),
+        pwaReady: false
+      };
+
+      /* UI refs */
+      var chatEl = document.getElementById('chat');
+      var inputEl = document.getElementById('input');
+      var statusEl = document.getElementById('status');
+      var btnLoad = document.getElementById('btnLoad');
+      var btnSave = document.getElementById('btnSave');
+      var btnConfig = document.getElementById('btnConfig');
+      var fileInput = document.getElementById('fileInput');
+
+      var configModal = document.getElementById('configModal');
+      var personaField = document.getElementById('personaField');
+      var responsesField = document.getElementById('responsesField');
+      var localMemoriesField = document.getElementById('localMemoriesField');
+      var backstoryField = document.getElementById('backstoryField');
+      var applyConfig = document.getElementById('applyConfig');
+      var resetConfig = document.getElementById('resetConfig');
+      var closeConfig = document.getElementById('closeConfig');
+
+      var adModal = document.getElementById('adModal');
+      var closeAd = document.getElementById('closeAd');
+
+      /* Render helpers */
+      function appendBubble(text, who) {
+        var div = document.createElement('div');
+        div.className = 'bubble ' + (who === 'user' ? 'user' : 'bot');
+        div.textContent = text;
+        chatEl.appendChild(div);
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+      function updateStatus() {
+        var name = STATE.persona && STATE.persona.name ? STATE.persona.name : "[unset]";
+        statusEl.textContent = "Ready • Persona: " + name + " • PWA: " + (STATE.pwaReady ? "enabled" : "standby");
+      }
+
+      /* Pipeline: persona + scripted responses + local memories */
+      function fillPersonaPlaceholders(text) {
+        var name = STATE.persona.name || "your companion";
+        var goal = STATE.persona.goal || "to listen";
+        return String(text).replace(/\{name\}/g, name).replace(/\{goal\}/g, goal);
+      }
+      function matchScripted(msg) {
+        var lower = String(msg).toLowerCase();
+        var i;
+        for (i = 0; i < STATE.responses.length; i++) {
+          var trig = String(STATE.responses[i].trigger || "").toLowerCase();
+          if (trig && lower.indexOf(trig) !== -1) {
+            return STATE.responses[i].reply;
+          }
+        }
+        return null;
+      }
+      function rememberLocal(text) {
+        STATE.localMemories.push({ ts: nowISO(), text: text });
+        persist(KEY_LOCAL_MEM, STATE.localMemories);
+      }
+      function respondUser(msg) {
+        var scripted = matchScripted(msg);
+        var reply = scripted ? fillPersonaPlaceholders(scripted)
+          : ("I am " + (STATE.persona.name || "your companion") + ". My goal is " + (STATE.persona.goal || "to listen") + ".");
+        rememberLocal(msg);
+        return reply;
+      }
+
+      /* Events: chat input */
+      inputEl.addEventListener('keydown', function (e) {
+        if (e.keyCode === 13 && !e.shiftKey) {
+          e.preventDefault();
+          var msg = inputEl.value.trim();
+          if (!msg) return;
+          inputEl.value = '';
+          appendBubble(msg, 'user');
+          var bot = respondUser(msg);
+          appendBubble(bot, 'bot');
+        }
+      });
+
+      /* Config modal events */
+      btnConfig.addEventListener('click', function () {
+        personaField.value = JSON.stringify(STATE.persona, null, 2);
+        responsesField.value = JSON.stringify(STATE.responses, null, 2);
+        localMemoriesField.value = JSON.stringify(STATE.localMemories, null, 2);
+        backstoryField.value = JSON.stringify(STATE.backstory, null, 2);
+        configModal.style.display = 'flex';
+      });
+      closeConfig.addEventListener('click', function () {
+        configModal.style.display = 'none';
+      });
+      applyConfig.addEventListener('click', function () {
+        STATE.persona = safeParse(personaField.value, STATE.persona);
+        STATE.responses = safeParse(responsesField.value, STATE.responses);
+        STATE.localMemories = safeParse(localMemoriesField.value, STATE.localMemories);
+        STATE.backstory = safeParse(backstoryField.value, STATE.backstory);
+
+        persist(KEY_PERSONA, STATE.persona);
+        persist(KEY_RESPONSES, STATE.responses);
+        persist(KEY_LOCAL_MEM, STATE.localMemories);
+        persist(KEY_BACKSTORY, STATE.backstory);
+
+        updateStatus();
+        configModal.style.display = 'none';
+        appendBubble("Configuration applied.", 'bot');
+      });
+      resetConfig.addEventListener('click', function () {
+        localStorage.removeItem(KEY_PERSONA);
+        localStorage.removeItem(KEY_RESPONSES);
+        localStorage.removeItem(KEY_LOCAL_MEM);
+        localStorage.removeItem(KEY_BACKSTORY);
+
+        STATE.persona = DEFAULT_PERSONA;
+        STATE.responses = DEFAULT_RESPONSES;
+        STATE.localMemories = DEFAULT_LOCAL_MEM.slice(0);
+        STATE.backstory = DEFAULT_BACKSTORY;
+
+        updateStatus();
+        configModal.style.display = 'none';
+        appendBubble("Configuration reset. Fresh start.", 'bot');
+      });
+
+      /* Load/Save JSON */
+      btnLoad.addEventListener('click', function () {
+        fileInput.value = '';
+        fileInput.click();
+      });
+      fileInput.addEventListener('change', function (e) {
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var data = safeParse(reader.result, null);
+          if (!data) { appendBubble("Failed to parse JSON.", 'bot'); return; }
+          if (data.persona) STATE.persona = data.persona;
+          if (data.responses) STATE.responses = data.responses;
+          if (data.localMemories) STATE.localMemories = data.localMemories;
+          if (data.backstory) STATE.backstory = data.backstory;
+
+          persist(KEY_PERSONA, STATE.persona);
+          persist(KEY_RESPONSES, STATE.responses);
+          persist(KEY_LOCAL_MEM, STATE.localMemories);
+          persist(KEY_BACKSTORY, STATE.backstory);
+
+          updateStatus();
+          appendBubble("Configuration loaded.", 'bot');
+        };
+        reader.readAsText(file);
+      });
+      btnSave.addEventListener('click', function () {
+        var payload = {
+          persona: STATE.persona,
+          responses: STATE.responses,
+          localMemories: STATE.localMemories,
+          backstory: STATE.backstory
+        };
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'toy-ai-config.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 0);
+      });
+
+      /* Initial greeting using persona */
+      function initialGreeting() {
+        var name = STATE.persona.name || "Companion";
+        var greet = "Hello. I am " + name + ".";
+        if (STATE.persona.goal) greet += " My goal is " + STATE.persona.goal + ".";
+        appendBubble(greet, 'bot');
+      }
+
+      /* PWA: Inline Service Worker via Blob */
+      function registerSW() {
+        var swCode = [
+          "self.addEventListener('install', function(e){",
+          "  e.waitUntil(caches.open('toy-ai-cache').then(function(c){ return c.addAll(['./']); }));",
+          "});",
+          "self.addEventListener('fetch', function(e){",
+          "  e.respondWith(caches.match(e.request).then(function(r){ return r || fetch(e.request); }));",
+          "});"
+        ].join("");
+        var blob = new Blob([swCode], { type: 'application/javascript' });
+        var url = URL.createObjectURL(blob);
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register(url).then(function () {
+            STATE.pwaReady = true;
+            updateStatus();
+          }).catch(function () {
+            STATE.pwaReady = false;
+            updateStatus();
+          });
+        }
+      }
+
+      /* Boot */
+      updateStatus();
+      initialGreeting();
+      registerSW();
+    })();
+  </script>
+</body>
+</html>
